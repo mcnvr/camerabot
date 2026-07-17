@@ -35,3 +35,30 @@ def test_substitutes_env_in_targets(tmp_path):
 def test_missing_env_raises(tmp_path):
     with pytest.raises(KeyError):
         load_config(_write(tmp_path), env={})
+
+
+TELEGRAM_YAML = """
+interval_sec: 45
+jitter_sec: 15
+fetcher: curl_cffi
+items:
+  - name: "Canon G7 X III (Black)"
+    url: "https://example.com/p"
+    sku: "3637C001"
+notify:
+  telegram:
+    bot_token: "{TELEGRAM_BOT_TOKEN}"
+    chat_ids:
+      - "{TELEGRAM_CHAT_ID}"
+      - "999"
+  targets: []
+"""
+
+def _write_telegram(tmp_path):
+    p = tmp_path / "config.yaml"
+    p.write_text(TELEGRAM_YAML, encoding="utf-8")
+    return p
+
+def test_telegram_block_expands_multiple_chat_ids(tmp_path):
+    cfg = load_config(_write_telegram(tmp_path), env={"TELEGRAM_BOT_TOKEN": "T", "TELEGRAM_CHAT_ID": "C"})
+    assert cfg.notify_targets == ["tgram://T/C", "tgram://T/999"]

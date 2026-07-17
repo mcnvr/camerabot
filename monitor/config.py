@@ -32,7 +32,15 @@ def load_config(path: str | Path, env: Mapping[str, str] | None = None) -> Confi
     raw = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
 
     items = [Item(name=i["name"], url=i["url"], sku=str(i["sku"])) for i in raw["items"]]
-    targets = [t.format_map(env) for t in raw["notify"]["targets"]]
+
+    notify_raw = raw["notify"]
+    targets: list[str] = []
+    telegram = notify_raw.get("telegram")
+    if telegram:
+        bot_token = telegram["bot_token"].format_map(env)
+        for chat_id in telegram["chat_ids"]:
+            targets.append(f"tgram://{bot_token}/{chat_id.format_map(env)}")
+    targets.extend(t.format_map(env) for t in notify_raw.get("targets", []))
 
     return Config(
         interval_sec=int(raw["interval_sec"]),

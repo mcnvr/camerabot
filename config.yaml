@@ -6,5 +6,9 @@ items:
     url: "https://www.usa.canon.com/shop/p/powershot-g7-x-mark-iii?color=Black&type=New"
     sku: "3637C001"
 notify:
-  targets:
-    - "tgram://{TELEGRAM_BOT_TOKEN}/{TELEGRAM_CHAT_ID}"
+  telegram:
+    bot_token: "{TELEGRAM_BOT_TOKEN}"
+    chat_ids:
+      - "{TELEGRAM_CHAT_ID}"
+      # add more recipient chat_ids here
+  targets: []
