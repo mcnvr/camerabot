@@ -11,8 +11,16 @@ class _Resp:
 
 
 def test_returns_body_on_200(monkeypatch):
+    body = '<html><script type="application/ld+json">{}</script></html>'
+    monkeypatch.setattr(fetcher, "_get", lambda url, timeout: _Resp(200, body))
+    assert fetch("http://x") == body
+
+
+def test_200_without_jsonld_raises_challenge(monkeypatch):
     monkeypatch.setattr(fetcher, "_get", lambda url, timeout: _Resp(200, "<html>ok</html>"))
-    assert fetch("http://x") == "<html>ok</html>"
+    with pytest.raises(FetchError) as ei:
+        fetch("http://x")
+    assert ei.value.signature == "CHALLENGE"
 
 
 def test_403_raises_http_signature(monkeypatch):
