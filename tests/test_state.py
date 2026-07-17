@@ -46,3 +46,15 @@ def test_set_baseline_then_same_silent(tmp_path):
     s = StateStore(tmp_path / "state.json")
     s.set("item1", "OUT_OF_STOCK")
     assert s.should_notify("item1", "OUT_OF_STOCK") is False
+
+
+def test_creates_parent_directories_on_save(tmp_path):
+    """Test that StateStore creates parent directories if they don't exist."""
+    p = tmp_path / "sub" / "state.json"
+    s = StateStore(p)
+    s.set("item1", "IN_STOCK")
+    assert p.exists()
+    # Verify persistence round-trip
+    s2 = StateStore(p)
+    assert s2.get("item1") == "IN_STOCK"
+    assert s2.should_notify("item1", "IN_STOCK") is False
