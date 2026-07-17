@@ -14,6 +14,8 @@ from monitor.state import StateStore
 
 log = logging.getLogger("monitor")
 
+ERROR_CONFIRM_POLLS = 2
+
 
 def run_cycle(item: Item, fetch_fn, detect_fn) -> tuple[str, DetectResult | None]:
     try:
@@ -35,26 +37,69 @@ def _sleep_with_jitter(cfg: Config) -> None:
     time.sleep(cfg.interval_sec + random.uniform(0, cfg.jitter_sec))
 
 
-def process_item(item: Item, store: StateStore, notifier: Notifier, fetch_fn, detect_fn) -> str:
-    """Run one fetch->detect cycle for item and notify on transitions.
+def confirm_state(pending: dict, key: str, raw_state: str, threshold: int = ERROR_CONFIRM_POLLS) -> str | None:
+    """Debounce ERROR: states so a transient blip never gets confirmed.
+
+    Stock states (anything not starting with "ERROR:") are always immediate:
+    they clear any pending error count for the key and pass through as-is.
+
+    ERROR: states must be observed `threshold` times in a row (same
+    signature) before being confirmed (returned); otherwise None is
+    returned to signal "swallow, not yet confirmed". A differing error
+    signature resets the count to 1.
+    """
+    if not raw_state.startswith("ERROR:"):
+        pending.pop(key, None)
+        return raw_state
+
+    sig, count = pending.get(key, (None, 0))
+    if raw_state == sig:
+        count += 1
+    else:
+        count = 1
+    pending[key] = (raw_state, count)
+    if count < threshold:
+        return None
+    return raw_state
+
+
+def process_item(
+    item: Item,
+    store: StateStore,
+    notifier: Notifier,
+    fetch_fn,
+    detect_fn,
+    pending: dict,
+    confirm_threshold: int = ERROR_CONFIRM_POLLS,
+) -> str:
+    """Run one fetch->detect cycle for item and notify on confirmed transitions.
+
+    ERROR: states are debounced via confirm_state before being compared
+    against the stored state, so a transient blip (e.g. one Akamai
+    challenge poll) never triggers an alert. Stock states (IN/OUT) are
+    never delayed.
 
     Persistence is gated on send success: if notifier.send() fails, the
     stored state is left untouched so the same transition is retried (and
     re-alerted) on the next cycle instead of being silently swallowed.
     """
-    state, detail = run_cycle(item, fetch_fn, detect_fn)
+    raw_state, detail = run_cycle(item, fetch_fn, detect_fn)
+    eff = confirm_state(pending, item.key, raw_state, confirm_threshold)
+    if eff is None:
+        log.info("suppressed transient %s -> %s", item.name, raw_state)
+        return raw_state
     prev = store.get(item.key)
-    if state != prev:
-        title, body = format_message(item, state, detail)
+    if eff != prev:
+        title, body = format_message(item, eff, detail)
         ok = notifier.send(title, body)
         if ok:
-            store.set(item.key, state)
-            log.info("NOTIFY %s -> %s", item.name, state)
+            store.set(item.key, eff)
+            log.info("NOTIFY %s -> %s", item.name, eff)
         else:
-            log.warning("send failed for %s -> %s; will retry next cycle", item.name, state)
+            log.warning("notify failed, will retry %s -> %s", item.name, eff)
     else:
-        log.info("no change %s -> %s", item.name, state)
-    return state
+        log.info("no change %s -> %s", item.name, eff)
+    return raw_state
 
 
 def main() -> None:
@@ -72,9 +117,10 @@ def main() -> None:
         notifier.send(f"✅ monitor started — {item.name}", f"current: {state}\n{body}")
         log.info("startup %s -> %s", item.name, state)
 
+    pending: dict = {}
     while True:
         for item in cfg.items:
-            process_item(item, store, notifier, fetch, detect)
+            process_item(item, store, notifier, fetch, detect, pending)
         _sleep_with_jitter(cfg)
 
 
