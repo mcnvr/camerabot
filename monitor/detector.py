@@ -1,0 +1,71 @@
+# monitor/detector.py
+from __future__ import annotations
+import enum
+import json
+import re
+from dataclasses import dataclass
+
+_LD_RE = re.compile(
+    r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+    re.S | re.I,
+)
+
+
+class Status(enum.Enum):
+    IN_STOCK = "IN_STOCK"
+    OUT_OF_STOCK = "OUT_OF_STOCK"
+
+
+@dataclass
+class DetectResult:
+    status: Status
+    availability_raw: str
+    price: str | None
+    name: str | None
+
+
+class ParseError(Exception):
+    pass
+
+
+def _iter_offers(node):
+    """Yield (product_node, offer_node) pairs found anywhere in the JSON-LD tree."""
+    if isinstance(node, dict):
+        if "offers" in node:
+            offers = node["offers"]
+            for off in (offers if isinstance(offers, list) else [offers]):
+                if isinstance(off, dict) and "availability" in off:
+                    yield node, off
+        for v in node.values():
+            yield from _iter_offers(v)
+    elif isinstance(node, list):
+        for v in node:
+            yield from _iter_offers(v)
+
+
+def detect(html: str, sku: str) -> DetectResult:
+    blocks = _LD_RE.findall(html)
+    if not blocks:
+        raise ParseError("no application/ld+json block found")
+
+    for block in blocks:
+        try:
+            data = json.loads(block)
+        except json.JSONDecodeError:
+            continue
+        for product, offer in _iter_offers(data):
+            if str(product.get("sku")) != sku:
+                continue
+            avail = offer.get("availability")
+            if not isinstance(avail, str):
+                raise ParseError(f"sku {sku} offer missing availability")
+            status = Status.IN_STOCK if avail.rstrip("/").endswith("InStock") else Status.OUT_OF_STOCK
+            price = offer.get("price")
+            return DetectResult(
+                status=status,
+                availability_raw=avail,
+                price=str(price) if price is not None else None,
+                name=product.get("name"),
+            )
+
+    raise ParseError(f"sku {sku} not found in JSON-LD offers")
