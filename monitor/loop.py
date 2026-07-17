@@ -35,14 +35,14 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     load_dotenv()
     cfg = load_config("config.yaml")
-    store = StateStore("state.json")
+    store = StateStore("state/state.json")
     notifier = Notifier(cfg.notify_targets)
 
     # Startup baseline ping — one per item, then silent until a transition.
     for item in cfg.items:
         state, detail = run_cycle(item, fetch, detect)
         store.set(item.key, state)
-        title, body = format_message(item, state, detail)
+        _, body = format_message(item, state, detail)
         notifier.send(f"✅ monitor started — {item.name}", f"current: {state}\n{body}")
         log.info("startup %s -> %s", item.name, state)
 

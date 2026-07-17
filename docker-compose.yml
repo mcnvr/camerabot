@@ -1,0 +1,13 @@
+services:
+  monitor:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - monitor-state:/app/state
+    # loop.py writes state.json in CWD (/app); mount the volume there via a symlink-free path:
+    working_dir: /app
+    command: ["python", "-m", "monitor.loop"]
+
+volumes:
+  monitor-state:
