@@ -24,3 +24,19 @@ def test_adds_targets_and_sends(monkeypatch):
     ok = n.send("t", "b")
     assert ok is True
     assert fake.sent == [("t", "b")]
+
+
+class _FailingFakeApprise(_FakeApprise):
+    def notify(self, title, body):
+        self.sent.append((title, body))
+        return False
+
+
+def test_send_returns_false_and_logs_warning_on_failure(monkeypatch, caplog):
+    fake = _FailingFakeApprise()
+    monkeypatch.setattr(notify_mod.apprise, "Apprise", lambda: fake)
+    n = Notifier(["tgram://a/b"])
+    with caplog.at_level("WARNING", logger="monitor"):
+        ok = n.send("t", "b")
+    assert ok is False
+    assert any("t" in rec.message or "failed" in rec.message.lower() for rec in caplog.records)

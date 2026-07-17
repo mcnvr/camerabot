@@ -1,5 +1,8 @@
 from __future__ import annotations
+import logging
 import apprise
+
+log = logging.getLogger("monitor")
 
 
 class Notifier:
@@ -9,4 +12,7 @@ class Notifier:
             self._ap.add(t)
 
     def send(self, title: str, body: str) -> bool:
-        return bool(self._ap.notify(title=title, body=body))
+        ok = bool(self._ap.notify(title=title, body=body))
+        if not ok:
+            log.warning("notify send failed: %s", title)
+        return ok
