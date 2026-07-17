@@ -1,5 +1,6 @@
 from __future__ import annotations
 from curl_cffi import requests as _cffi
+from curl_cffi.requests.exceptions import RequestException, Timeout
 
 
 class FetchError(Exception):
@@ -16,8 +17,8 @@ def _get(url: str, timeout: int):
 def fetch(url: str, timeout: int = 15) -> str:
     try:
         resp = _get(url, timeout)
-    except Exception as e:  # curl_cffi transport failures
-        sig = "TIMEOUT" if "timed out" in str(e).lower() or "timeout" in str(e).lower() else "CONN"
+    except RequestException as e:  # curl_cffi typed transport failures
+        sig = "TIMEOUT" if isinstance(e, Timeout) else "CONN"
         raise FetchError(sig) from e
     if resp.status_code != 200:
         raise FetchError(f"HTTP_{resp.status_code}")

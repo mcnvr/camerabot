@@ -1,6 +1,7 @@
 import pytest
 import monitor.fetcher as fetcher
 from monitor.fetcher import fetch, FetchError
+from curl_cffi.requests.exceptions import ConnectionError as CffiConnectionError, Timeout as CffiTimeout
 
 
 class _Resp:
@@ -30,8 +31,17 @@ def test_other_status_raises_http_signature(monkeypatch):
 
 def test_transport_error_raises_conn(monkeypatch):
     def boom(url, timeout):
-        raise RuntimeError("connection reset")
+        raise CffiConnectionError("connection reset")
     monkeypatch.setattr(fetcher, "_get", boom)
     with pytest.raises(FetchError) as ei:
         fetch("http://x")
-    assert ei.value.signature in ("CONN", "TIMEOUT")
+    assert ei.value.signature == "CONN"
+
+
+def test_timeout_raises_timeout_signature(monkeypatch):
+    def boom(url, timeout):
+        raise CffiTimeout("the request timed out")
+    monkeypatch.setattr(fetcher, "_get", boom)
+    with pytest.raises(FetchError) as ei:
+        fetch("http://x")
+    assert ei.value.signature == "TIMEOUT"
