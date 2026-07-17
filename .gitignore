@@ -1,0 +1,6 @@
+.env
+state.json
+canon*.html
+__pycache__/
+*.pyc
+.venv/
