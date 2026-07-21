@@ -3,26 +3,24 @@ from monitor.config import Item
 from monitor.detector import DetectResult
 
 
-def format_message(item: Item, state: str, detail: DetectResult | None) -> tuple[str, str]:
+def format_message(item: Item, state: str, detail: DetectResult | None = None) -> tuple[str, str]:
+    """Build (title, body) for a state transition.
+
+    Format is uniform across sites; only the leading status line differs:
+        ✅ IN STOCK: {SITE} - {name}
+        ❌ OUT OF STOCK: {SITE} - {name}
+        ⚠️ ERROR (retrying): {SITE} - {name}
+    The link always follows on its own line; ERROR adds a recovery hint.
+    """
+    site = item.site
     if state == "IN_STOCK":
-        price = detail.price if detail and detail.price else "?"
-        return (
-            f"🟢 IN STOCK: {item.name}",
-            f"{item.name} is IN STOCK at ${price}\n{item.url}",
-        )
-    if state == "OUT_OF_STOCK":
-        return (
-            f"🔴 OUT OF STOCK: {item.name}",
-            f"{item.name} went out of stock.\n{item.url}",
-        )
-    if state.startswith("ERROR:"):
-        signature = state.split(":", 1)[1]
-        return (
-            f"⚠️ ERROR: {item.name}",
-            f"Monitor error for {item.name}: {signature}\n{item.url}",
-        )
-    # startup/baseline or unknown
-    return (
-        f"✅ monitor: {item.name}",
-        f"{item.name} — current state: {state}\n{item.url}",
-    )
+        line = f"✅ IN STOCK: {site} - {item.name}"
+    elif state == "OUT_OF_STOCK":
+        line = f"❌ OUT OF STOCK: {site} - {item.name}"
+    elif state.startswith("ERROR:"):
+        line = f"⚠️ ERROR (retrying): {site} - {item.name}"
+        return line, f"{line}\nA non-error status means it's back up.\n{item.url}"
+    else:
+        # startup baseline or unknown state
+        line = f"ℹ️ {state}: {site} - {item.name}"
+    return line, f"{line}\n{item.url}"

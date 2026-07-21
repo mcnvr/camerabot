@@ -3,3 +3,7 @@ apprise>=1.8
 pyyaml>=6.0
 python-dotenv>=1.0
 pytest>=8.0
+# Browser tier (Target/PerimeterX). Chromium itself is installed via apt in the
+# Dockerfile. Only used when an item sets `fetcher: browser` and the tier is not
+# disabled via DISABLE_BROWSER_TIER. Needs ~2 GB RAM.
+zendriver>=0.15

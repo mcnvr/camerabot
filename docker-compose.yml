@@ -3,6 +3,11 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
+    # Browser tier (Target) needs ~2 GB RAM. On a 1 GB box, put
+    # DISABLE_BROWSER_TIER=1 in .env so Chromium is never launched (Canon +
+    # Best Buy still run). shm_size backs Chromium even though we also pass
+    # --disable-dev-shm-usage.
+    shm_size: "512m"
     volumes:
       - monitor-state:/app/state
     # loop.py writes state.json in CWD (/app); mount the volume there via a symlink-free path:

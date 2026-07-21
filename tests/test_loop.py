@@ -1,10 +1,32 @@
 from monitor.config import Item
 from monitor.detector import DetectResult, Status, ParseError
-from monitor.fetcher import FetchError
-from monitor.loop import run_cycle, process_item, confirm_state, ERROR_CONFIRM_POLLS
+from monitor.fetcher import FetchError, fetch as curl_fetch
+from monitor.browser_fetch import fetch_browser
+from monitor.loop import (
+    run_cycle,
+    process_item,
+    confirm_state,
+    fetch_for,
+    _browser_tier_disabled,
+    ERROR_CONFIRM_POLLS,
+)
 from monitor.state import StateStore
 
 ITEM = Item(name="X", url="http://x", sku="3637C001")
+
+
+def test_fetch_for_selects_tier_by_item():
+    assert fetch_for(Item(name="c", url="u", sku="1", fetcher="curl_cffi")) is curl_fetch
+    assert fetch_for(Item(name="b", url="u", sku="2", fetcher="browser")) is fetch_browser
+
+
+def test_browser_tier_disabled_reads_env(monkeypatch):
+    monkeypatch.delenv("DISABLE_BROWSER_TIER", raising=False)
+    assert _browser_tier_disabled() is False
+    monkeypatch.setenv("DISABLE_BROWSER_TIER", "1")
+    assert _browser_tier_disabled() is True
+    monkeypatch.setenv("DISABLE_BROWSER_TIER", "false")
+    assert _browser_tier_disabled() is False
 
 def test_cycle_in_stock():
     fetch_fn = lambda url: "<html/>"

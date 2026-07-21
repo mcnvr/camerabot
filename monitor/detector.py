@@ -25,7 +25,13 @@ class DetectResult:
 
 
 class ParseError(Exception):
-    pass
+    """Detection failed. `signature` is the coarse error label surfaced to the
+    error state machine (e.g. PARSE_FAIL, CHALLENGE) so a bot-wall page reads as
+    a transient challenge rather than a code-level parse bug."""
+
+    def __init__(self, message: str, signature: str = "PARSE_FAIL"):
+        super().__init__(message)
+        self.signature = signature
 
 
 def _iter_offers(node):
@@ -43,10 +49,15 @@ def _iter_offers(node):
             yield from _iter_offers(v)
 
 
-def detect(html: str, sku: str) -> DetectResult:
+def detect_canon(html: str, sku: str) -> DetectResult:
+    """Canon: JSON-LD ProductGroup, offers.availability ends with /InStock.
+
+    No JSON-LD at all means Canon served an Akamai challenge interstitial, not
+    the product page, so that reads as CHALLENGE (transient) not PARSE_FAIL.
+    """
     blocks = _LD_RE.findall(html)
     if not blocks:
-        raise ParseError("no application/ld+json block found")
+        raise ParseError("no application/ld+json block found", signature="CHALLENGE")
 
     for block in blocks:
         try:
@@ -69,3 +80,62 @@ def detect(html: str, sku: str) -> DetectResult:
             )
 
     raise ParseError(f"sku {sku} not found in JSON-LD offers")
+
+
+# Back-compat alias: `detect` is the Canon detector.
+detect = detect_canon
+
+
+def detect_bestbuy(html: str, sku: str) -> DetectResult:
+    """Best Buy: server-rendered SKU-keyed sold-out label.
+
+    Best Buy's JSON-LD carries no availability, but the PDP renders
+    `data-testid="pdp-sold-out-{sku}"` when the SKU is sold out — present =
+    OUT, absent = IN. The `pdp-` structural marker guards against an Akamai
+    challenge page (which lacks it) being misread as in stock.
+    """
+    if sku not in html or "pdp-" not in html:
+        raise ParseError(f"best buy pdp for {sku} not present", signature="CHALLENGE")
+    sold_out = f'pdp-sold-out-{sku}' in html
+    return DetectResult(
+        status=Status.OUT_OF_STOCK if sold_out else Status.IN_STOCK,
+        availability_raw="pdp-sold-out" if sold_out else "buyable",
+        price=None,
+        name=None,
+    )
+
+
+def detect_target(html: str, sku: str) -> DetectResult:
+    """Target: SSR shipping fulfillment cell.
+
+    Target is a Next.js SPA but server-renders the fulfillment section into the
+    raw HTML. `data-test="fulfillment-cell-shipping"` present = ship-to-home
+    available (IN); absent = OUT. Same-day-delivery / in-store-pickup cells are
+    intentionally NOT treated as in stock. `__NEXT_DATA__` + the tcin guard
+    against a challenge/blocked page reading as OUT.
+    """
+    if sku not in html or "__NEXT_DATA__" not in html:
+        raise ParseError(f"target pdp for {sku} not present", signature="CHALLENGE")
+    in_stock = 'data-test="fulfillment-cell-shipping"' in html
+    return DetectResult(
+        status=Status.IN_STOCK if in_stock else Status.OUT_OF_STOCK,
+        availability_raw="ship-to-home" if in_stock else "no-shipping-cell",
+        price=None,
+        name=None,
+    )
+
+
+DETECTORS = {
+    "CANON": detect_canon,
+    "BESTBUY": detect_bestbuy,
+    "TARGET": detect_target,
+}
+
+
+def detector_for(site: str):
+    """Map a config `site` label (e.g. "BEST BUY") to its detector function."""
+    key = "".join(ch for ch in site.upper() if ch.isalpha())
+    try:
+        return DETECTORS[key]
+    except KeyError:
+        raise ValueError(f"unknown site {site!r} (known: {sorted(DETECTORS)})")

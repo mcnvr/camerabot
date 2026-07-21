@@ -1,10 +1,27 @@
-interval_sec: 45
+# Poll cadence: every interval_sec + up to jitter_sec random. All items are
+# checked once per cycle. Target uses the heavy browser tier (~5-10s/check), so
+# keep interval_sec >= 60 when Target is enabled.
+interval_sec: 60
 jitter_sec: 15
-fetcher: curl_cffi
+fetcher: curl_cffi   # default fetch tier; per-item override below
 items:
   - name: "Canon PowerShot G7 X Mark III (Black)"
+    site: "CANON"
     url: "https://www.usa.canon.com/shop/p/powershot-g7-x-mark-iii?color=Black&type=New"
     sku: "3637C001"
+    # fetcher: curl_cffi  (default) — JSON-LD in raw HTML
+  - name: "Canon PowerShot G7 X Mark III (Black)"
+    site: "BEST BUY"
+    url: "https://www.bestbuy.com/product/canon-powershot-g7-x-mark-iii-20-1-megapixel-digital-camera-black/J7C86S93T6/sku/6359935"
+    sku: "6359935"
+    # fetcher: curl_cffi  (default) — server-rendered sold-out marker
+  - name: "Canon PowerShot G7 X Mark III (Black)"
+    site: "TARGET"
+    url: "https://www.target.com/p/canon-powershot-g7-x-mark-iii-20-1-megapixel-digital-camera-black/-/A-91467769"
+    sku: "91467769"
+    # Target stock is JS-hydrated behind PerimeterX — needs a real browser.
+    # Requires ~2 GB RAM. On a 1 GB box set DISABLE_BROWSER_TIER=1 to skip it.
+    fetcher: browser
 notify:
   telegram:
     bot_token: "{TELEGRAM_BOT_TOKEN}"

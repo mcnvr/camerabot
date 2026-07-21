@@ -12,6 +12,8 @@ class Item:
     name: str
     url: str
     sku: str
+    site: str = "CANON"
+    fetcher: str = "curl_cffi"  # "curl_cffi" (fast) or "browser" (zendriver, heavy)
 
     @property
     def key(self) -> str:
@@ -31,7 +33,17 @@ def load_config(path: str | Path, env: Mapping[str, str] | None = None) -> Confi
     env = os.environ if env is None else env
     raw = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
 
-    items = [Item(name=i["name"], url=i["url"], sku=str(i["sku"])) for i in raw["items"]]
+    default_fetcher = raw.get("fetcher", "curl_cffi")
+    items = [
+        Item(
+            name=i["name"],
+            url=i["url"],
+            sku=str(i["sku"]),
+            site=str(i.get("site", "CANON")),
+            fetcher=str(i.get("fetcher", default_fetcher)),
+        )
+        for i in raw["items"]
+    ]
 
     notify_raw = raw["notify"]
     targets: list[str] = []

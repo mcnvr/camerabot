@@ -1,12 +1,14 @@
 from __future__ import annotations
 import logging
+import os
 import random
 import time
 
 from dotenv import load_dotenv
 
+from monitor.browser_fetch import fetch_browser
 from monitor.config import Config, Item, load_config
-from monitor.detector import DetectResult, ParseError, detect
+from monitor.detector import DetectResult, ParseError, detector_for
 from monitor.fetcher import FetchError, fetch
 from monitor.messages import format_message
 from monitor.notify import Notifier
@@ -17,6 +19,18 @@ log = logging.getLogger("monitor")
 ERROR_CONFIRM_POLLS = 2
 
 
+def _browser_tier_disabled() -> bool:
+    """Runtime kill-switch for the heavy zendriver tier — set on small (1 GB)
+    boxes so browser-backed items (Target) are skipped instead of OOM-killing
+    the whole container."""
+    return os.getenv("DISABLE_BROWSER_TIER", "").strip().lower() in ("1", "true", "yes")
+
+
+def fetch_for(item: Item):
+    """Pick the fetch function for an item: heavy browser tier vs fast curl."""
+    return fetch_browser if item.fetcher == "browser" else fetch
+
+
 def run_cycle(item: Item, fetch_fn, detect_fn) -> tuple[str, DetectResult | None]:
     try:
         try:
@@ -25,8 +39,8 @@ def run_cycle(item: Item, fetch_fn, detect_fn) -> tuple[str, DetectResult | None
             return f"ERROR:{e.signature}", None
         try:
             res = detect_fn(html, item.sku)
-        except ParseError:
-            return "ERROR:PARSE_FAIL", None
+        except ParseError as e:
+            return f"ERROR:{e.signature}", None
         return res.status.value, res
     except Exception:
         log.exception("unexpected error in run_cycle for %s", item.name)
@@ -109,18 +123,30 @@ def main() -> None:
     store = StateStore("state/state.json")
     notifier = Notifier(cfg.notify_targets)
 
+    # Drop browser-tier items when the kill-switch is set (e.g. 1 GB box).
+    items = list(cfg.items)
+    if _browser_tier_disabled():
+        skipped = [i for i in items if i.fetcher == "browser"]
+        for i in skipped:
+            log.warning("DISABLE_BROWSER_TIER set — skipping %s [%s]", i.name, i.site)
+        items = [i for i in items if i.fetcher != "browser"]
+
+    # Resolve each item's detector + fetch fn once (fails fast on unknown site).
+    detectors = {item.key: detector_for(item.site) for item in items}
+    fetchers = {item.key: fetch_for(item) for item in items}
+
     # Startup baseline ping — one per item, then silent until a transition.
-    for item in cfg.items:
-        state, detail = run_cycle(item, fetch, detect)
+    for item in items:
+        state, detail = run_cycle(item, fetchers[item.key], detectors[item.key])
         store.set(item.key, state)
         _, body = format_message(item, state, detail)
-        notifier.send(f"✅ monitor started — {item.name}", f"current: {state}\n{body}")
-        log.info("startup %s -> %s", item.name, state)
+        notifier.send(f"✅ monitor started — {item.site}", body)
+        log.info("startup %s [%s] -> %s", item.name, item.site, state)
 
     pending: dict = {}
     while True:
-        for item in cfg.items:
-            process_item(item, store, notifier, fetch, detect, pending)
+        for item in items:
+            process_item(item, store, notifier, fetchers[item.key], detectors[item.key], pending)
         _sleep_with_jitter(cfg)
 
 

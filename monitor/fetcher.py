@@ -22,6 +22,7 @@ def fetch(url: str, timeout: int = 15) -> str:
         raise FetchError(sig) from e
     if resp.status_code != 200:
         raise FetchError(f"HTTP_{resp.status_code}")
-    if "application/ld+json" not in resp.text:
-        raise FetchError("CHALLENGE")
+    # Page-validity / bot-challenge detection is per-site and lives in each
+    # detector (it knows what a real product page looks like) — the fetcher is
+    # site-agnostic and only owns transport + HTTP status.
     return resp.text

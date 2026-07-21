@@ -1,9 +1,32 @@
 # tests/test_detector.py
 from pathlib import Path
 import pytest
-from monitor.detector import detect, Status, ParseError
+from monitor.detector import (
+    detect,
+    detect_canon,
+    detect_bestbuy,
+    detect_target,
+    detector_for,
+    Status,
+    ParseError,
+)
 
 FIX = Path(__file__).parent / "fixtures"
+
+
+def test_detector_for_maps_site_labels():
+    assert detector_for("CANON") is detect_canon
+    assert detector_for("BEST BUY") is detect_bestbuy   # space-insensitive
+    assert detector_for("target") is detect_target       # case-insensitive
+
+
+def test_detector_for_unknown_site_raises():
+    with pytest.raises(ValueError):
+        detector_for("newegg")
+
+
+def test_detect_alias_is_canon():
+    assert detect is detect_canon
 
 def test_out_of_stock_target_sku():
     html = (FIX / "canon_out.html").read_text(encoding="utf-8", errors="replace")
