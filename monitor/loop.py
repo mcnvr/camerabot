@@ -144,12 +144,13 @@ def main() -> None:
     detectors = {item.key: detector_for(item.site) for item in items}
     fetchers = {item.key: fetch_for(item) for item in items}
 
-    # Startup baseline ping — one per item, then silent until a transition.
+    # Startup baseline ping — one per item in the normal status format (so the
+    # emoji matches the real state), then silent until a transition.
     for item in items:
         state, detail = run_cycle(item, fetchers[item.key], detectors[item.key])
         store.set(item.key, state)
-        _, body = format_message(item, state, detail)
-        notifier.send(f"✅ monitor started — {item.site}", body)
+        title, body = format_message(item, state, detail)
+        notifier.send(title, body)
         log.info("startup %s [%s] -> %s", item.name, item.site, state)
 
     # Per-item scheduling: each item is polled on its own cadence (Target slow,

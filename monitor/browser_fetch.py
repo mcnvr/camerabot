@@ -44,7 +44,10 @@ def fetch_browser(url: str, timeout: int = 60) -> str:
 async def _afetch(url: str, timeout: int) -> str:
     import zendriver as zd  # lazy: curl-only deploys never import this
 
-    kwargs = dict(headless=True, no_sandbox=True, browser_args=list(_CHROME_ARGS))
+    # sandbox=False makes zendriver add --no-sandbox, required to run Chrome as
+    # root in Docker. (The param is `sandbox`, NOT `no_sandbox` — the latter is
+    # silently swallowed by **kwargs and leaves the sandbox on.)
+    kwargs = dict(headless=True, sandbox=False, browser_args=list(_CHROME_ARGS))
     # In slim Docker the binary is /usr/bin/chromium; point zendriver at it
     # explicitly so it doesn't rely on auto-detecting a Chrome install.
     chrome_path = os.getenv("ZENDRIVER_BROWSER_PATH") or os.getenv("CHROME_PATH")
