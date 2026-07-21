@@ -47,8 +47,17 @@ def run_cycle(item: Item, fetch_fn, detect_fn) -> tuple[str, DetectResult | None
         return "ERROR:UNKNOWN", None
 
 
-def _sleep_with_jitter(cfg: Config) -> None:
-    time.sleep(cfg.interval_sec + random.uniform(0, cfg.jitter_sec))
+def item_interval(item: Item, cfg: Config) -> int:
+    """Poll cadence for an item: its own interval_sec, else the global default.
+
+    Lets cheap curl sites (Canon, Best Buy) poll fast while the heavy browser
+    site (Target) polls slowly — fewer Chrome launches and a less bot-like
+    request cadence against PerimeterX."""
+    return item.interval_sec if item.interval_sec is not None else cfg.interval_sec
+
+
+def _next_due(item: Item, cfg: Config, now: float) -> float:
+    return now + item_interval(item, cfg) + random.uniform(0, cfg.jitter_sec)
 
 
 def confirm_state(pending: dict, key: str, raw_state: str, threshold: int = ERROR_CONFIRM_POLLS) -> str | None:
@@ -143,11 +152,18 @@ def main() -> None:
         notifier.send(f"✅ monitor started — {item.site}", body)
         log.info("startup %s [%s] -> %s", item.name, item.site, state)
 
+    # Per-item scheduling: each item is polled on its own cadence (Target slow,
+    # curl sites fast). A 1 s tick checks which items are due.
     pending: dict = {}
+    now = time.monotonic()
+    next_due = {item.key: _next_due(item, cfg, now) for item in items}
     while True:
+        now = time.monotonic()
         for item in items:
-            process_item(item, store, notifier, fetchers[item.key], detectors[item.key], pending)
-        _sleep_with_jitter(cfg)
+            if now >= next_due[item.key]:
+                process_item(item, store, notifier, fetchers[item.key], detectors[item.key], pending)
+                next_due[item.key] = _next_due(item, cfg, time.monotonic())
+        time.sleep(1)
 
 
 if __name__ == "__main__":

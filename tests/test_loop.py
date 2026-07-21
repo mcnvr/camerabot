@@ -7,9 +7,11 @@ from monitor.loop import (
     process_item,
     confirm_state,
     fetch_for,
+    item_interval,
     _browser_tier_disabled,
     ERROR_CONFIRM_POLLS,
 )
+from monitor.config import Config
 from monitor.state import StateStore
 
 ITEM = Item(name="X", url="http://x", sku="3637C001")
@@ -18,6 +20,12 @@ ITEM = Item(name="X", url="http://x", sku="3637C001")
 def test_fetch_for_selects_tier_by_item():
     assert fetch_for(Item(name="c", url="u", sku="1", fetcher="curl_cffi")) is curl_fetch
     assert fetch_for(Item(name="b", url="u", sku="2", fetcher="browser")) is fetch_browser
+
+
+def test_item_interval_uses_override_then_global():
+    cfg = Config(interval_sec=60, jitter_sec=15, fetcher="curl_cffi", items=[], notify_targets=[])
+    assert item_interval(Item(name="a", url="u", sku="1"), cfg) == 60                       # global default
+    assert item_interval(Item(name="b", url="u", sku="2", interval_sec=180), cfg) == 180    # per-item override
 
 
 def test_browser_tier_disabled_reads_env(monkeypatch):

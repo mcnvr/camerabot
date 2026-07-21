@@ -1,9 +1,9 @@
-# Poll cadence: every interval_sec + up to jitter_sec random. All items are
-# checked once per cycle. Target uses the heavy browser tier (~5-10s/check), so
-# keep interval_sec >= 60 when Target is enabled.
-interval_sec: 60
+# Poll cadence. Each item polls on its own schedule: interval_sec (per-item or
+# this global default) + up to jitter_sec random. Cheap curl sites poll fast;
+# Target (heavy browser + PerimeterX) polls slow via its own interval_sec.
+interval_sec: 60          # default for curl sites (Canon, Best Buy)
 jitter_sec: 15
-fetcher: curl_cffi   # default fetch tier; per-item override below
+fetcher: curl_cffi        # default fetch tier; per-item override below
 items:
   - name: "Canon PowerShot G7 X Mark III (Black)"
     site: "CANON"
@@ -22,6 +22,7 @@ items:
     # Target stock is JS-hydrated behind PerimeterX — needs a real browser.
     # Requires ~2 GB RAM. On a 1 GB box set DISABLE_BROWSER_TIER=1 to skip it.
     fetcher: browser
+    interval_sec: 180   # slow: fewer Chrome launches + less bot-like vs PerimeterX
 notify:
   telegram:
     bot_token: "{TELEGRAM_BOT_TOKEN}"

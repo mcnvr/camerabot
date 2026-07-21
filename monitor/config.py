@@ -14,6 +14,7 @@ class Item:
     sku: str
     site: str = "CANON"
     fetcher: str = "curl_cffi"  # "curl_cffi" (fast) or "browser" (zendriver, heavy)
+    interval_sec: int | None = None  # per-item poll cadence; None => global default
 
     @property
     def key(self) -> str:
@@ -41,6 +42,7 @@ def load_config(path: str | Path, env: Mapping[str, str] | None = None) -> Confi
             sku=str(i["sku"]),
             site=str(i.get("site", "CANON")),
             fetcher=str(i.get("fetcher", default_fetcher)),
+            interval_sec=(int(i["interval_sec"]) if i.get("interval_sec") is not None else None),
         )
         for i in raw["items"]
     ]
