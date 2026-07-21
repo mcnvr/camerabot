@@ -43,7 +43,7 @@ can't read it — it needs a real browser. Canon + Best Buy don't.
 ## Step 1 — Create the Telegram bot
 
 1. In Telegram, message **@BotFather** → `/newbot` → follow prompts → copy the **bot token**
-   (looks like `8603285561:AAE...`).
+   (looks like `123456789:AAExxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`).
 2. Send any message to your new bot (so it can DM you).
 3. Get your numeric **chat id**: open
    `https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates` in a browser and read
@@ -58,7 +58,7 @@ cp .env.example .env
 Edit `.env`:
 
 ```
-TELEGRAM_BOT_TOKEN=8603285561:AAE...your token...
+TELEGRAM_BOT_TOKEN=123456789:AAExxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 TELEGRAM_CHAT_ID=8753883817
 ```
 
