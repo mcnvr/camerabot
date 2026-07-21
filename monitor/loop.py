@@ -2,6 +2,7 @@ from __future__ import annotations
 import logging
 import os
 import random
+import threading
 import time
 
 from dotenv import load_dotenv
@@ -13,6 +14,7 @@ from monitor.fetcher import FetchError, fetch
 from monitor.messages import format_message
 from monitor.notify import Notifier
 from monitor.state import StateStore
+from monitor.status_bot import Tracker, run_listener
 
 log = logging.getLogger("monitor")
 
@@ -94,6 +96,7 @@ def process_item(
     detect_fn,
     pending: dict,
     confirm_threshold: int = ERROR_CONFIRM_POLLS,
+    tracker: Tracker | None = None,
 ) -> str:
     """Run one fetch->detect cycle for item and notify on confirmed transitions.
 
@@ -107,6 +110,8 @@ def process_item(
     re-alerted) on the next cycle instead of being silently swallowed.
     """
     raw_state, detail = run_cycle(item, fetch_fn, detect_fn)
+    if tracker is not None:
+        tracker.record(item.key, item.site, raw_state)
     eff = confirm_state(pending, item.key, raw_state, confirm_threshold)
     if eff is None:
         log.info("suppressed transient %s -> %s", item.name, raw_state)
@@ -143,15 +148,27 @@ def main() -> None:
     # Resolve each item's detector + fetch fn once (fails fast on unknown site).
     detectors = {item.key: detector_for(item.site) for item in items}
     fetchers = {item.key: fetch_for(item) for item in items}
+    tracker = Tracker()
 
     # Startup baseline ping — one per item in the normal status format (so the
     # emoji matches the real state), then silent until a transition.
     for item in items:
         state, detail = run_cycle(item, fetchers[item.key], detectors[item.key])
+        tracker.record(item.key, item.site, state)
         store.set(item.key, state)
         title, body = format_message(item, state, detail)
         notifier.send(title, body)
         log.info("startup %s [%s] -> %s", item.name, item.site, state)
+
+    # /status listener: lets an authorized chat ask the bot for the latest
+    # result of each site on demand. Daemon thread so it dies with the process.
+    order = [item.key for item in items]
+    if cfg.telegram_token and cfg.telegram_chat_ids:
+        threading.Thread(
+            target=run_listener,
+            args=(cfg.telegram_token, cfg.telegram_chat_ids, tracker, order, threading.Event()),
+            daemon=True,
+        ).start()
 
     # Per-item scheduling: each item is polled on its own cadence (Target slow,
     # curl sites fast). A 1 s tick checks which items are due.
@@ -162,7 +179,7 @@ def main() -> None:
         now = time.monotonic()
         for item in items:
             if now >= next_due[item.key]:
-                process_item(item, store, notifier, fetchers[item.key], detectors[item.key], pending)
+                process_item(item, store, notifier, fetchers[item.key], detectors[item.key], pending, tracker=tracker)
                 next_due[item.key] = _next_due(item, cfg, time.monotonic())
         time.sleep(1)
 

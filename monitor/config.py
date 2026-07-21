@@ -1,6 +1,6 @@
 from __future__ import annotations
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping
 
@@ -28,6 +28,10 @@ class Config:
     fetcher: str
     items: list[Item]
     notify_targets: list[str]
+    # Raw Telegram creds (when the telegram notify block is used) — powers the
+    # /status listener: the token to poll/reply, and the chat_ids allowed to ask.
+    telegram_token: str | None = None
+    telegram_chat_ids: list[str] = field(default_factory=list)
 
 
 def load_config(path: str | Path, env: Mapping[str, str] | None = None) -> Config:
@@ -49,11 +53,13 @@ def load_config(path: str | Path, env: Mapping[str, str] | None = None) -> Confi
 
     notify_raw = raw["notify"]
     targets: list[str] = []
+    tg_token: str | None = None
+    tg_chat_ids: list[str] = []
     telegram = notify_raw.get("telegram")
     if telegram:
-        bot_token = telegram["bot_token"].format_map(env)
-        for chat_id in telegram["chat_ids"]:
-            targets.append(f"tgram://{bot_token}/{chat_id.format_map(env)}")
+        tg_token = telegram["bot_token"].format_map(env)
+        tg_chat_ids = [c.format_map(env) for c in telegram["chat_ids"]]
+        targets.extend(f"tgram://{tg_token}/{c}" for c in tg_chat_ids)
     targets.extend(t.format_map(env) for t in notify_raw.get("targets", []))
 
     return Config(
@@ -62,4 +68,6 @@ def load_config(path: str | Path, env: Mapping[str, str] | None = None) -> Confi
         fetcher=raw.get("fetcher", "curl_cffi"),
         items=items,
         notify_targets=targets,
+        telegram_token=tg_token,
+        telegram_chat_ids=tg_chat_ids,
     )

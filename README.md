@@ -136,6 +136,42 @@ Change `interval_sec` under the Target item in `config.yaml` if you want.
 
 ---
 
+## Add another alert recipient
+
+The same bot can alert multiple people:
+
+1. The new person opens **@CameraStockAlertBot** and taps **Start** (so the bot is
+   allowed to DM them).
+2. Get their numeric chat id: `https://api.telegram.org/bot<TOKEN>/getUpdates` →
+   find their message's `chat.id`.
+3. Add it under `notify.telegram.chat_ids` in `config.yaml` (a literal id, or a
+   `{ENV_VAR}` reference):
+
+   ```yaml
+   notify:
+     telegram:
+       bot_token: "{TELEGRAM_BOT_TOKEN}"
+       chat_ids:
+         - "{TELEGRAM_CHAT_ID}"
+         - "8753883817"        # second recipient
+   ```
+4. `docker compose up -d` to reload. New recipients also get answers to `/status`.
+
+## `/status` command
+
+Message **`/status`** to the bot at any time; it replies with one short message —
+the latest result per site and how long ago it was checked:
+
+```
+📊 Monitor status
+CANON: ❌ OUT OF STOCK — 12s ago
+BEST BUY: ❌ OUT OF STOCK — 44s ago
+TARGET: ❌ OUT OF STOCK — 2m ago
+```
+
+Only chat ids listed in `config.yaml` are answered — a stranger who finds the bot
+gets ignored.
+
 ## Troubleshooting
 
 - **Target check errors (`ERROR ... BROWSER_ERR` / `CHALLENGE`)** — PerimeterX may
