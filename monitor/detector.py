@@ -116,6 +116,14 @@ def detect_target(html: str, sku: str) -> DetectResult:
     """
     if sku not in html or "__NEXT_DATA__" not in html:
         raise ParseError(f"target pdp for {sku} not present", signature="CHALLENGE")
+    # The shipping cell renders as a DISABLED skeleton before client-side
+    # hydration and is ALWAYS present in the raw/pre-hydration HTML. A blocked or
+    # incomplete render (e.g. PerimeterX challenging a datacenter IP, so the
+    # redsky fulfillment XHR never lands) leaves exactly that skeleton — reading
+    # it as "in stock" is a false positive. Only an ENABLED cell means buyable;
+    # the skeleton means "couldn't determine", which is a CHALLENGE, not a sale.
+    if 'data-test="fulfillment-cell-shipping" disabled' in html:
+        raise ParseError("target not hydrated (skeleton shipping cell)", signature="CHALLENGE")
     in_stock = 'data-test="fulfillment-cell-shipping"' in html
     return DetectResult(
         status=Status.IN_STOCK if in_stock else Status.OUT_OF_STOCK,

@@ -36,6 +36,16 @@ def test_challenge_page_raises_challenge():
     assert ei.value.signature == "CHALLENGE"
 
 
+def test_unhydrated_skeleton_is_challenge_not_in_stock():
+    # Pre-hydration / bot-blocked HTML: __NEXT_DATA__ + tcin present, but the
+    # shipping cell is the DISABLED skeleton. Must NOT read as in stock.
+    html = f'<html><script id="__NEXT_DATA__">{{"tcin":"{TCIN}"}}</script>' \
+           f'<div data-test="fulfillment-cell-shipping" disabled="">Shipping</div></html>'
+    with pytest.raises(ParseError) as ei:
+        detect_target(html, TCIN)
+    assert ei.value.signature == "CHALLENGE"
+
+
 def test_tcin_present_but_not_a_pdp_raises_challenge():
     with pytest.raises(ParseError) as ei:
         detect_target(f"<html>{TCIN} no next data</html>", TCIN)
